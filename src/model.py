@@ -5,25 +5,25 @@ from torchvision.models import resnet18, ResNet18_Weights
 from hyperbolic import poincare_distance, expmap0
 
 class FeatureExtractor(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout=0.3):
         super().__init__()
         base_model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-        modules = list(base_model.children())[:-1]  # remove final FC
+        modules = list(base_model.children())[:-1]
         self.feature = nn.Sequential(*modules)
-        # Projection head: 512-dim Euclidean → 64-dim → Poincaré ball
+        # Dropout added between layers to prevent co-adaptation of neurons
         self.projector = nn.Sequential(
             nn.Linear(512, 128),
             nn.ReLU(),
+            nn.Dropout(dropout),     # <-- drops 30% of neurons randomly during training
             nn.Linear(128, 64)
         )
         self.out_dim = 64
 
     def forward(self, x):
         x = self.feature(x)
-        x = x.view(x.size(0), -1)   # [B, 512]
-        x = self.projector(x)        # [B, 64] Euclidean
-        x = expmap0(x)               # [B, 64] on Poincaré ball
-        return x
+        x = x.view(x.size(0), -1)
+        x = self.projector(x)
+        return expmap0(x)
 
 def compute_prototypes(features, labels, n_way):
     prototypes = []
